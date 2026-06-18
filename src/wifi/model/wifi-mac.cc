@@ -1952,8 +1952,10 @@ BlockAckType
 WifiMac::GetBaTypeAsOriginator(const Mac48Address& recipient, uint8_t tid) const
 {
     auto agreement = GetBaAgreementEstablishedAsOriginator(recipient, tid);
-    NS_ABORT_MSG_IF(!agreement,
-                    "No existing Block Ack agreement with " << recipient << " TID: " << +tid);
+    if (!agreement)
+    {
+        return BlockAckType::BASIC; // agreement destroyed during handover
+    }
     return agreement->get().GetBlockAckType();
 }
 
@@ -1961,8 +1963,10 @@ BlockAckReqType
 WifiMac::GetBarTypeAsOriginator(const Mac48Address& recipient, uint8_t tid) const
 {
     auto agreement = GetBaAgreementEstablishedAsOriginator(recipient, tid);
-    NS_ABORT_MSG_IF(!agreement,
-                    "No existing Block Ack agreement with " << recipient << " TID: " << +tid);
+    if (!agreement)
+    {
+        return BlockAckReqType::BASIC; // agreement destroyed during handover
+    }
     return agreement->get().GetBlockAckReqType();
 }
 

@@ -977,7 +977,16 @@ BlockAckManager::GetBlockAckReqHeader(const Mac48Address& recipient,
                                       std::optional<Mac48Address> gcrGroupAddr) const
 {
     auto it = GetOriginatorBaAgreement(recipient, tid, gcrGroupAddr);
-    NS_ASSERT(it != m_originatorAgreements.end());
+    if (it == m_originatorAgreements.end())
+    {
+        // Agreement already destroyed (handover BA flush).
+        // Return a minimal valid header so downstream TID checks don't crash.
+        CtrlBAckRequestHeader safeHdr;
+        safeHdr.SetType(BlockAckReqType::BASIC);
+        safeHdr.SetTidInfo(tid);
+        safeHdr.SetStartingSequence(0);
+        return safeHdr;
+    }
     CtrlBAckRequestHeader reqHdr;
     if (gcrGroupAddr.has_value())
     {

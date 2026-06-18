@@ -206,6 +206,18 @@ BridgeNetDevice::Learn(Mac48Address source, Ptr<NetDevice> port)
     }
 }
 
+void
+BridgeNetDevice::ForceLearn(Mac48Address source, Ptr<NetDevice> incomingPort)
+{
+    NS_LOG_FUNCTION(this << source << incomingPort);
+    // Bypasses m_enableLearning — controller always wins.
+    LearnedState& state  = m_learnState[source];
+    state.associatedPort = incomingPort;
+    state.expirationTime = Simulator::Now() + m_expirationTime;
+    NS_LOG_INFO("BridgeNetDevice::ForceLearn  " << source
+                << "  ->  port " << incomingPort);
+}
+
 Ptr<NetDevice>
 BridgeNetDevice::GetLearnedState(Mac48Address source)
 {

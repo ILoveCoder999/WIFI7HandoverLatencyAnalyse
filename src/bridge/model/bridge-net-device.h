@@ -103,6 +103,21 @@ class BridgeNetDevice : public NetDevice
      */
     Ptr<NetDevice> GetBridgePort(uint32_t n) const;
 
+    /**
+     * @brief Force-insert a MAC→port mapping into the forwarding table,
+     *        bypassing the normal per-frame learning mechanism.
+     *
+     * Models the behaviour of a centralised WLAN controller (e.g. Cisco WLC /
+     * Aruba) that pushes a CAM-table update to the wired switch the instant a
+     * STA associates with a new AP — without waiting for the STA to transmit
+     * its first data frame.
+     *
+     * @param source       the STA's MAC address
+     * @param incomingPort the bridge port the STA is now reachable through
+     *                     (i.e. the new AP's WiFi NetDevice)
+     */
+    void ForceLearn(Mac48Address source, Ptr<NetDevice> incomingPort);
+
     // inherited from NetDevice base class.
     void SetIfIndex(const uint32_t index) override;
     uint32_t GetIfIndex() const override;

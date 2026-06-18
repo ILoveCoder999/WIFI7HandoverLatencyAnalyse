@@ -396,6 +396,15 @@ WifiDefaultAckManager::TryAddMpdu(Ptr<const WifiMpdu> mpdu, const WifiTxParamete
         acknowledgment->blockAckReqTxVector =
             GetWifiRemoteStationManager()->GetBlockAckTxVector(receiver, txParams.m_txVector);
         acknowledgment->blockAckTxVector = acknowledgment->blockAckReqTxVector;
+        if (!m_mac->GetBaAgreementEstablishedAsOriginator(receiver, tid))
+        {
+            NS_LOG_DEBUG("BA agreement gone, fallback to Normal Ack");
+            auto ack = std::make_unique<WifiNormalAck>();
+            ack->ackTxVector =
+                GetWifiRemoteStationManager()->GetAckTxVector(receiver, txParams.m_txVector);
+            ack->SetQosAckPolicy(receiver, tid, WifiMacHeader::NORMAL_ACK);
+            return ack;
+        }
         acknowledgment->barType = m_mac->GetBarTypeAsOriginator(receiver, tid);
         acknowledgment->baType = m_mac->GetBaTypeAsOriginator(receiver, tid);
         acknowledgment->SetQosAckPolicy(receiver, tid, WifiMacHeader::BLOCK_ACK);
@@ -423,6 +432,15 @@ WifiDefaultAckManager::TryAddMpdu(Ptr<const WifiMpdu> mpdu, const WifiTxParamete
     auto acknowledgment = std::make_unique<WifiBlockAck>();
     acknowledgment->blockAckTxVector =
         GetWifiRemoteStationManager()->GetBlockAckTxVector(receiver, txParams.m_txVector);
+    if (!hdr.IsBlockAckReq() && !m_mac->GetBaAgreementEstablishedAsOriginator(receiver, tid))
+    {
+        NS_LOG_DEBUG("BA agreement gone, fallback to Normal Ack");
+        auto ack = std::make_unique<WifiNormalAck>();
+        ack->ackTxVector =
+            GetWifiRemoteStationManager()->GetAckTxVector(receiver, txParams.m_txVector);
+        ack->SetQosAckPolicy(receiver, tid, WifiMacHeader::NORMAL_ACK);
+        return ack;
+    }
     acknowledgment->baType = m_mac->GetBaTypeAsOriginator(receiver, tid);
     acknowledgment->SetQosAckPolicy(receiver, tid, WifiMacHeader::NORMAL_ACK);
     return acknowledgment;
