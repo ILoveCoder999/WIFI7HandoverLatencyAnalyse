@@ -6,7 +6,7 @@
   "repetitions": 1,
   "channels": ["{36,20,BAND_5GHZ,0}", "{40,20,BAND_5GHZ,0}"],
   "packetInterval": 0.03,
-  "payloadSize": 22,
+  "payloadSize": 1400,
   "constantRate": false,
   "port": 9,
   "interferers": [],

@@ -139,35 +139,67 @@ void timerCallback(Timer* timer, Ptr<WaypointMobilityModel> staMobility) {
 // AP the STA just left; BA teardown is deferred until after new Assoc.
 static Mac48Address g_pendingBaTeardownAp("ff:ff:ff:ff:ff:ff");
 
-static void doDestroyBaAgreements(Ptr<StaWifiMac> staMac, Mac48Address oldAp)
+// Call: doDestroyBaAgreements(staMac, oldAp, newAp)
+static void doDestroyBaAgreements(Ptr<StaWifiMac> staMac,
+                                   Mac48Address oldAp,
+                                   Mac48Address newAp)
 {
-    NS_LOG_INFO("[BA-flush t=" << Simulator::Now().GetMilliSeconds()
-                << " ms]  destroying BA agreements with old AP " << oldAp);
+    static const uint8_t acToTids[4][2] = {{0,3},{1,2},{4,5},{6,7}};
 
-    for (uint8_t tid = 0; tid < 8; ++tid)
-    {
-        AcIndex ac = QosUtilsMapTidToAc(tid);
-        Ptr<QosTxop> txop = staMac->GetQosTxop(ac);
-        if (!txop || !txop->GetBaManager())
-            continue;
-        auto bam = txop->GetBaManager();
-        // Uplink: STA is originator — this is the BAR-storm source
-        if (bam->GetAgreementAsOriginator(oldAp, tid).has_value())
-            bam->DestroyOriginatorAgreement(oldAp, tid, std::nullopt);
-        // Downlink: STA is recipient
-        bam->DestroyRecipientAgreement(oldAp, tid, std::nullopt);
-    }
-    // Flush orphaned in-flight MPDUs that block PeekFirstAvailable.
-    // DestroyOriginatorAgreement only erases the map entry; the in-flight
-    // packets remain in WifiMacQueue with IsInFlight()==true but no BAM
-    // entry to track them.  PeekFirstAvailable skips all in-flight packets,
-    // so EDCA appears to have an empty queue and never starts on the new AP.
-    NS_LOG_INFO("[BA-flush] Flushing WifiMacQueues to purge orphaned in-flight MPDUs");
     for (uint8_t aci = 0; aci < 4; ++aci)
     {
-        Ptr<QosTxop> txop2 = staMac->GetQosTxop(AcIndex(aci));
-        if (txop2 && txop2->GetWifiMacQueue())
-            txop2->GetWifiMacQueue()->Flush();
+        Ptr<QosTxop> txop = staMac->GetQosTxop(AcIndex(aci));
+        if (!txop || !txop->GetWifiMacQueue())
+            continue;
+        auto q = txop->GetWifiMacQueue();
+
+        uint32_t dropped = 0, requeued = 0;
+        //  std::vector<std::pair<Ptr<Packet>, WifiMacHeader>> toRequeue;
+        //  std::vector<std::pair<Ptr<Packet>, WifiMacHeader>> toRequeue;   // 旧
+        std::vector<Ptr<WifiMpdu>> toRequeue;                            // 新
+
+        for (uint8_t t = 0; t < 2; ++t)
+        {
+            uint8_t tid = acToTids[aci][t];
+            Ptr<WifiMpdu> mpdu = q->PeekByTidAndAddress(tid, oldAp);
+            while (mpdu)
+            {
+                Ptr<WifiMpdu> next = q->PeekByTidAndAddress(tid, oldAp,
+                                                             std::nullopt, mpdu);
+                // Re-address ALL packets (in-flight or not) to newAp.
+                // In-flight packets have stale SNs from the old BA session with oldAp;
+                // removing and re-enqueueing with SN=0 lets BAM assign fresh SNs at TX time.
+                // The old AP is gone — no stale ACK will arrive — so this is safe.
+                if (mpdu->IsInFlight()) ++dropped;  // count for logging only
+                WifiMacHeader newHdr = mpdu->GetHeader();
+                newHdr.SetAddr1(newAp);       // RA = newAp
+                // 不再写死 SN：让 MAC 在发送时按新 BA 窗口分配窗口内序号
+                Ptr<WifiMpdu> m = Create<WifiMpdu>(mpdu->GetPacket()->Copy(), newHdr);
+                m->UnassignSeqNo();
+                toRequeue.push_back(m);
+                q->Remove(mpdu);
+                ++requeued;
+                mpdu = next;
+            }
+        }
+
+        // Re-enqueue with newAp addressing (FIFO order preserved)
+        //for (auto& [pkt, hdr] : toRequeue)
+        //   txop->Queue(Create<WifiMpdu>(pkt, hdr));
+        for (auto& m : toRequeue)                          // 新
+            txop->Queue(m);
+
+        // ★ 销毁与 oldAp 的 BA originator agreement，停止 BAR 洪流
+        for (uint8_t t = 0; t < 2; ++t)
+        {
+            uint8_t tid = acToTids[aci][t];
+            txop->GetBaManager()->DestroyOriginatorAgreement(oldAp, tid, std::nullopt);
+        }
+
+
+        NS_LOG_INFO("[BA-flush] AC " << (uint32_t)aci
+                    << ": dropped " << dropped << " in-flight, re-queued "
+                    << requeued << " non-in-flight → " << newAp);
     }
 }
 
@@ -195,7 +227,7 @@ void destroyBaAgreements(Ptr<WifiNetDevice> /*staDevice*/, Mac48Address oldAp)
  * flushing QosTxop's pending-MPDU state while the MAC is in scan/auth/assoc
  * limbo, which was causing EDCA access to stall on the return leg.
  */
-void afterAssocDestroyBa(Ptr<WifiNetDevice> staDevice, Mac48Address /*newAp*/)
+void afterAssocDestroyBa(Ptr<WifiNetDevice> staDevice, Mac48Address newAp)
 {
     if (g_pendingBaTeardownAp.IsGroup())
         return;  // initial association — nothing to clean up
@@ -206,8 +238,10 @@ void afterAssocDestroyBa(Ptr<WifiNetDevice> staDevice, Mac48Address /*newAp*/)
     if (!staMac)
         return;
     NS_LOG_INFO("[BA-flush] Assoc complete — now tearing down BA for old AP " << oldAp);
-    Simulator::ScheduleNow(&doDestroyBaAgreements, staMac, oldAp);
+ 
+    Simulator::ScheduleNow(doDestroyBaAgreements, staMac, oldAp, newAp);
 }
+
 
 int main(int argc, char** argv) {
     LogComponentEnable("RoamingManager",   LOG_LEVEL_DEBUG);
@@ -246,6 +280,10 @@ int main(int argc, char** argv) {
     std::cout << "=== Starting simulation with activeScanning = " 
           << sim_config.activeScanning << " ===" << std::endl;
     RngSeedManager::SetSeed(1);
+
+    Config::SetDefault("ns3::WifiMacQueue::MaxDelay", TimeValue(MilliSeconds(800)));
+
+    
 
     // --- Nodes ---
     NodeContainer wifiApNodes;
@@ -299,6 +337,21 @@ int main(int argc, char** argv) {
                     "MaxMissedBeacons", UintegerValue(sim_config.maxMissedBeacons),
                     "FrameRetryLimit", UintegerValue(21)); // 在这里统一替代原先的 MaxSsrc
     staDevice = wifi.Install(spectrumPhyHelperSta, wifiMac, wifiStaNode);
+
+    {
+        Ptr<StaWifiMac> staMacQ = DynamicCast<StaWifiMac>(
+            DynamicCast<WifiNetDevice>(staDevice.Get(0))->GetMac());
+        for (auto ac : {AC_BE, AC_BK, AC_VI, AC_VO}) {
+            Ptr<QosTxop> txop = staMacQ->GetQosTxop(ac);
+            if (txop && txop->GetWifiMacQueue()) {
+                txop->GetWifiMacQueue()->SetAttribute(
+                    "MaxDelay", TimeValue(MilliSeconds(800)));   // 只设置，不回读
+                std::cout << "[CHECK] AC=" << ac
+                          << " MaxDelay <- 800 ms" << std::endl;
+            }
+        }
+    }
+
 
     // --- 2. AP1 PHY & MAC Setup ---
     SpectrumWifiPhyHelper spectrumPhyHelperAp1;

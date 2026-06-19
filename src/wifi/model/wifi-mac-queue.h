@@ -73,6 +73,7 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
     /// allow the usage of iterators and const iterators
     using Queue<WifiMpdu, WifiMacQueueContainer>::ConstIterator;
     using Queue<WifiMpdu, WifiMacQueueContainer>::Iterator;
+   
     using Queue<WifiMpdu, WifiMacQueueContainer>::IsEmpty;
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetNPackets;
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetNBytes;
