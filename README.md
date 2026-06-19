@@ -1,283 +1,197 @@
-# The Network Simulator, Version 3
+# Wi-Fi Handover Simulation & Analysis Toolkit (ns-3 / 802.11be)
 
-[![codecov](https://codecov.io/gh/nsnam/ns-3-dev-git/branch/master/graph/badge.svg)](https://codecov.io/gh/nsnam/ns-3-dev-git/branch/master/)
-[![Gitlab CI](https://gitlab.com/nsnam/ns-3-dev/badges/master/pipeline.svg)](https://gitlab.com/nsnam/ns-3-dev/-/pipelines)
-[![Github CI](https://github.com/nsnam/ns-3-dev-git/actions/workflows/per_commit.yml/badge.svg)](https://github.com/nsnam/ns-3-dev-git/actions)
+An ns-3 dual-AP Wi-Fi 7 handover simulation, with companion pcap/log analysis
+scripts and a batch runner. A STA moves back and forth between two APs, triggering
+an outbound and a return handover; the tools quantify each handover's per-phase
+latency, MAC queue flush behavior, and packet-loss causes.
 
-[![Latest Release](https://gitlab.com/nsnam/ns-3-dev/-/badges/release.svg)](https://gitlab.com/nsnam/ns-3-dev/-/releases)
+---
 
-## License
+## Contents
 
-This software is licensed under the terms of the GNU General Public License v2.0 only (GPL-2.0-only).
-See the LICENSE file for more details.
+All files live in `scratch/handover2d/`:
 
-## Table of Contents
+| File | Description |
+|------|-------------|
+| `handover.cc` | ns-3 simulation (2 APs + mobile STA + uplink UDP + ForceLearn controller + post-handover BA rebuild) |
+| `analyze_pcap_phases.py` | Analyzer: parses the STA capture, splits the handover into phases, reports flush frame counts and packet-loss classification |
+| `run_all.sh` | Batch runner: simulates + analyzes the 4 scenarios, isolating each scenario's outputs |
+| `handover_same_channel_active.json` | Config: same channel + active scan |
+| `handover_same_channel_passive.json` | Config: same channel + passive scan |
+| `handover_different_channels_active.json` | Config: different channels + active scan |
+| `handover_different_channels_passive.json` | Config: different channels + passive scan |
 
-* [Overview](#overview-an-open-source-project)
-* [Software overview](#software-overview)
-* [Getting ns-3](#getting-ns-3)
-* [Building ns-3](#building-ns-3)
-* [Testing ns-3](#testing-ns-3)
-* [Running ns-3](#running-ns-3)
-* [ns-3 Documentation](#ns-3-documentation)
-* [Working with the Development Version of ns-3](#working-with-the-development-version-of-ns-3)
-* [Contributing to ns-3](#contributing-to-ns-3)
-* [Reporting Issues](#reporting-issues)
-* [Asking Questions](#asking-questions)
-* [ns-3 App Store](#ns-3-app-store)
+---
 
-> **NOTE**: Much more substantial information about ns-3 can be found at
-<https://www.nsnam.org>
+## Requirements
 
-## Overview: An Open Source Project
+- **ns-3** (with wifi, spectrum, bridge, netanim modules), `scratch/handover2d` set up
+- **Python 3** (analyzer uses the standard library only — **no scapy**; pcap is parsed byte-wise)
+- **nlohmann/json** (used by `handover.cc` to parse configs)
 
-ns-3 is a free open source project aiming to build a discrete-event
-network simulator targeted for simulation research and education.
-This is a collaborative project; we hope that
-the missing pieces of the models we have not yet implemented
-will be contributed by the community in an open collaboration
-process. If you would like to contribute to ns-3, please check
-the [Contributing to ns-3](#contributing-to-ns-3) section below.
+---
 
-This README excerpts some details from a more extensive
-tutorial that is maintained at:
-<https://www.nsnam.org/documentation/latest/>
+## Build
 
-## Software overview
-
-From a software perspective, ns-3 consists of a number of C++
-libraries organized around different topics and technologies.
-Programs that actually run simulations can be written in
-either C++ or Python; the use of Python is enabled by
-[runtime C++/Python bindings](https://cppyy.readthedocs.io/en/latest/).  Simulation programs will
-typically link or import the ns `core` library and any additional
-libraries that they need.  ns-3 requires a modern C++ compiler
-installation (g++ or clang++) and the [CMake](https://cmake.org) build system.
-Most ns-3 programs are single-threaded; there is some limited
-support for parallelization using the [MPI](https://www.nsnam.org/docs/models/html/distributed.html) framework.
-ns-3 can also run in a real-time emulation mode by binding to an
-Ethernet device on the host machine and generating and consuming
-packets on an actual network.  The ns-3 APIs are documented
-using [Doxygen](https://www.doxygen.nl).
-
-The code for the framework and the default models provided
-by ns-3 is built as a set of libraries. The libraries maintained
-by the open source project can be found in the `src` directory.
-Users may extend ns-3 by adding libraries to the build;
-third-party libraries can be found on the [ns-3 App Store](https://www.nsnam.org)
-or elsewhere in public Git repositories, and are usually added to the `contrib` directory.
-
-## Getting ns-3
-
-ns-3 can be obtained by either downloading a released source
-archive, or by cloning the project's
-[Git repository](https://gitlab.com/nsnam/ns-3-dev.git).
-
-Starting with ns-3 release version 3.45, there are two versions
-of source archives that are published with each release:
-
-1. ns-3.##.tar.bz2
-1. ns-allinone-3.##.tar.bz2
-
-The first archive is simply a compressed archive of the same code
-that one can obtain by checking out the release tagged code from
-the ns-3-dev Git repository.  The second archive consists of
-ns-3 plus additional contributed modules that are maintained outside
-of the main ns-3 open source project but that have been reviewed
-by maintainers and lightly tested for compatibility with the
-release.  The contributed modules included in the `allinone` release
-will change over time as new third-party libraries emerge while others
-may lose compatibility with the ns-3 mainline (e.g., if they become
-unmaintained).
-
-## Building ns-3
-
-As mentioned above, ns-3 uses the CMake build system, but
-the project maintains a customized wrapper around CMake
-called the `ns3` tool.  This tool provides a
-[Waf-like](https://waf.io) API
-to the underlying CMake build manager.
-To build the set of default libraries and the example
-programs included in this package, you need to use the
-`ns3` tool. This tool provides a Waf-like API to the
-underlying CMake build manager.
-Detailed information on how to use `ns3` is included in the
-[quick start guide](doc/installation/source/quick-start.rst).
-
-Before building ns-3, you must configure it.
-This step allows the configuration of the build options,
-such as whether to enable the examples, tests and more.
-
-To configure ns-3 with examples and tests enabled,
-run the following command on the ns-3 main directory:
-
-```shell
-./ns3 configure --enable-examples --enable-tests
-```
-
-Then, build ns-3 by running the following command:
-
-```shell
+```bash
+cd ~/ns-3-dev
 ./ns3 build
 ```
 
-By default, the build artifacts will be stored in the `build/` directory.
+Produces the binary: `build/handover/ns3-dev-handover-debug`
 
-### Supported Platforms
+> ⚠️ After editing `handover.cc`, **always rebuild with `./ns3 build`** and run the
+> **freshly built** `ns3-dev-handover-debug`. Do not run a stale binary left over
+> from an earlier toolchain (e.g. `ns3.48-handover-debug`), or your source changes
+> will not take effect.
 
-The current codebase is expected to build and run on the
-set of platforms listed in the [release notes](RELEASE_NOTES.md)
-file.
+---
 
-Other platforms may or may not work: we welcome patches to
-improve the portability of the code to these other platforms.
+## Running
 
-## Testing ns-3
+### Option 1 — batch all 4 scenarios (recommended)
 
-ns-3 contains test suites to validate the models and detect regressions.
-To run the test suite, run the following command on the ns-3 main directory:
-
-```shell
-./test.py
+```bash
+bash scratch/handover2d/run_all.sh
 ```
 
-More information about ns-3 tests is available in the
-[test framework](doc/manual/source/test-framework.rst) section of the manual.
+The script auto-locates the ns-3 root and, for each config, runs:
 
-## Running ns-3
+1. The simulation (`--jsonConfig=<config>`), writing uniquely named sta_log / assoc_log;
+2. Moves **all** pcaps produced by that run (sta / ap0 / ap1 / csma) into the scenario
+   folder (so the next run cannot overwrite them);
+3. Runs `analyze_pcap_phases.py` on the STA capture + sta_log;
+4. Writes the report to `scratch/handover2d/results/<scenario>/`.
 
-On recent Linux systems, once you have built ns-3 (with examples
-enabled), it should be easy to run the sample programs with the
-following command, such as:
+Output layout:
 
-```shell
-./ns3 run simple-global-routing
+```
+results/
+└── <scenario>/
+    ├── analysis.txt          # full analysis report
+    ├── sta_log.json          # per-MPDU log
+    ├── assoc_log.json        # association log
+    ├── handover-sta-*.pcap   # STA capture (+ ap0 / ap1 / csma)
+    └── sim.log               # ns-3 stdout/stderr
 ```
 
-That program should generate a `simple-global-routing.tr` text
-trace file and a set of `simple-global-routing-xx-xx.pcap` binary
-PCAP trace files, which can be read by `tcpdump -n -tt -r filename.pcap`.
-The program source can be found in the `examples/routing` directory.
+### Option 2 — run a single scenario manually
 
-## Running ns-3 from Python
+```bash
+# 1. simulate
+./build/handover/ns3-dev-handover-debug \
+    --jsonConfig=scratch/handover2d/handover_same_channel_active.json \
+    --staLogFile=sta_log.json --assocLogFile=assoc_log.json
 
-If you do not plan to modify ns-3 upstream modules, you can get
-a pre-built version of the ns-3 python bindings. It is recommended
-to create a python virtual environment to isolate different application
-packages from system-wide packages (installable via the OS package managers).
-
-```shell
-python3 -m venv ns3env
-source ./ns3env/bin/activate
-pip install ns3
+# 2. analyze (reads the pcap directly — no Wireshark text export needed)
+python3 scratch/handover2d/analyze_pcap_phases.py handover-sta-2-0.pcap \
+    --sta-log sta_log.json --mode active
 ```
 
-If you do not have `pip`, check their documents
-on [how to install it](https://pip.pypa.io/en/stable/installation/).
+> The STA capture is named `handover-sta-<node>-<device>.pcap` (typically
+> `handover-sta-2-0.pcap` in this layout). Confirm with `ls handover-sta-*.pcap`.
 
-After installing the `ns3` package, you can then create your simulation python script.
-Below is a trivial demo script to get you started.
+---
 
-```python
-from ns import ns
+## Analyzer (`analyze_pcap_phases.py`)
 
-ns.LogComponentEnable("Simulator", ns.LOG_LEVEL_ALL)
+### Input
 
-ns.Simulator.Stop(ns.Seconds(10))
-ns.Simulator.Run()
-ns.Simulator.Destroy()
+- **pcap** (`.pcap`): parses radiotap + 802.11 frame headers directly from raw bytes,
+  compatible with 802.11be/EHT frames;
+- **text export** (`.txt`): Wireshark → Export Packet Dissections → As Plain Text (still supported);
+- **`--sta-log`** (optional): the ns-3 per-MPDU JSON log, enabling position-based loss classification.
+
+### Handover phases
+
+| Phase | Meaning (active scan / passive scan) |
+|-------|--------------------------------------|
+| Ph1 Link Failure | last old-AP ACK → Probe Req  /  last old Beacon → first new Beacon |
+| Ph2 Channel Probe | Probe Req → Probe Resp (active only) |
+| Ph3 Chan Dwell | Probe Resp / first new Beacon → Assoc Req |
+| Ph4 Assoc Handshake | Assoc Req → Assoc Resp |
+| Ph5 Net Recovery | Assoc Resp → first new data frame |
+| Ph5a ADDBA | ADDBA Req → ADDBA Resp |
+
+### Flush / loss statistics (replaces the removed "Phase 6")
+
+> **Why was Phase 6 removed?** The old Phase 6 measured the *time span* (last − first
+> timestamp) of the flush burst, which is always ~0 in ns-3: the surviving backlog is
+> aggregated into a **single A-MPDU sent at one instant** (span = 0), and when the
+> queue fully expires it is also 0. Two completely different situations yielded the
+> same 0 — misleading. We now measure the **frame count** instead.
+
+- `FlushFrames` — number of backlogged frames actually transmitted on air after reassoc;
+- `LostEst` — estimated loss (≈ estimated queued − flushed);
+- `DataInterrupt` — last old-AP ACK → first new data frame (user-perceived outage);
+- `UntilFullyACKed` — last old-AP ACK → burst fully acknowledged by the new AP.
+
+### Loss classification (requires `--sta-log`)
+
+Every **never-transmitted** dropped frame is classified by the STA's position at the
+frame's generation time:
+
+- **Handover loss** — falls within ±`--ho-window` (default 1.5 s) of a handover instant;
+- **Coverage-edge loss** — distance to the nearest AP > `--edge-dist` (default 45 m;
+  the effective range in this scenario is ~50 m) — the STA is near the trajectory ends,
+  the link is too weak to transmit, and the frame expires in the queue;
+- **Other**.
+
+### Common options
+
+```
+--mode {auto,active,passive}   scan mode (default auto)
+--sta-log <json>               per-MPDU log; enables loss classification
+--trip-time / --pos-start / --pos-end / --packet-interval   trajectory & traffic params
+--edge-dist <m>                coverage-edge distance threshold (default 45)
+--ho-window <s>                handover attribution time window (default 1.5)
+--controller-delay <ms>        ForceLearn controller push delay (fixed Phase-5a value)
 ```
 
-The simulation will take a while to start, while the bindings are loaded.
-The script above will print the logging messages for the called commands.
+---
 
-Use `help(ns)` to check the prototypes for all functions defined in the
-ns3 namespace. To get more useful results, query specific classes of
-interest and their functions e.g., `help(ns.Simulator)`.
+## Config fields (`handover.cc` → `HandoverConfig`)
 
-Smart pointers `Ptr<>` can be differentiated from objects by checking if
-`__deref__` is listed in `dir(variable)`. To dereference the pointer,
-use `variable.__deref__()`.
+| Field | Default | Description |
+|-------|---------|-------------|
+| `activeScanning` | true | active vs passive scan |
+| `differentChannels` | false | whether the two APs use different channels |
+| `tripTime` | 75 | one-way trip time (s) |
+| `staPosStart` / `staPosEnd` | 0 / 150 | STA round-trip endpoints (m) |
+| `apPositions` | 60, 90 | AP positions (m) |
+| `packetInterval` | 0.03 | uplink UDP packet interval (s) |
+| `payloadSize` | 22 | payload bytes |
+| `maxMissedBeacons` | 3 | missed beacons before declaring link failure |
+| `enableController` | false | ForceLearn controller (proactively updates the bridge FDB after handover) |
+| `controllerDelayMs` | 1.0 | controller push delay |
 
-Most ns-3 simulations are written in C++ and the documentation is
-oriented towards C++ users. The ns-3 tutorial programs (`first.cc`,
-`second.cc`, etc.) have Python equivalents, if you are looking for
-some initial guidance on how to use the Python API. The Python
-API may not be as full-featured as the C++ API, and an API guide
-for what C++ APIs are supported or not from Python do not currently exist.
-The project is looking for additional Python maintainers to improve
-the support for future Python users.
+---
 
-## ns-3 Documentation
+## Key findings & known behavior
 
-Once you have verified that your build of ns-3 works by running
-the `simple-global-routing` example as outlined in the [running ns-3](#running-ns-3)
-section, it is quite likely that you will want to get started on reading
-some ns-3 documentation.
+1. **The handover path works correctly**: with an adequate queue lifetime, both the
+   outbound and return backlogs flush successfully.
+2. **MSDU queue lifetime**: ns-3 `WifiMacQueue::MaxDelay` defaults to 500 ms. When the
+   handover outage + queuing time approaches/exceeds it, backlogged real-time packets
+   expire and are dropped (realistic behavior). It can be tuned in `handover.cc` after
+   `wifi.Install(...)` via `SetAttribute("MaxDelay", ...)` on each AC's queue
+   (note: this attribute is **write-only** — do not read it back with `GetAttribute`).
+3. **Coverage-edge loss ≠ handover loss**: drops at the trajectory ends (~51 m from the
+   AP) are a link-budget limitation, unrelated to the handover; eliminating them
+   requires topology changes (denser APs / higher TX power / smaller spacing), not
+   software parameters.
+4. **Evaluation metrics**: compare handover quality with `FlushFrames` + `DataInterrupt`
+   (total outage), not with the time-span "Phase 6".
 
-All of that documentation should always be available from
-the ns-3 website: <https://www.nsnam.org/documentation/>.
+---
 
-This documentation includes:
+## Troubleshooting
 
-* a tutorial
-* a reference manual
-* models in the ns-3 model library
-* a wiki for user-contributed tips: <https://www.nsnam.org/wiki/>
-* API documentation generated using doxygen: this is
-  a reference manual, most likely not very well suited
-  as introductory text:
-  <https://www.nsnam.org/doxygen/index.html>
-
-## Working with the Development Version of ns-3
-
-If you want to download and use the development version of ns-3, you
-need to use the tool `git`. A quick and dirty cheat sheet is included
-in the manual, but reading through the Git
-tutorials found in the Internet is usually a good idea if you are not
-familiar with it.
-
-If you have successfully installed Git, you can get
-a copy of the development version with the following command:
-
-```shell
-git clone https://gitlab.com/nsnam/ns-3-dev.git
-```
-
-However, we recommend to follow the GitLab guidelines for starters,
-that includes creating a GitLab account, forking the ns-3-dev project
-under the new account's name, and then cloning the forked repository.
-You can find more information in the [manual](https://www.nsnam.org/docs/manual/html/working-with-git.html).
-
-## Contributing to ns-3
-
-The process of contributing to the ns-3 project varies with
-the people involved, the amount of time they can invest
-and the type of model they want to work on, but the current
-process that the project tries to follow is described in the
-[contributing code](https://www.nsnam.org/developers/contributing-code/)
-website and in the [CONTRIBUTING.md](CONTRIBUTING.md) file.
-
-## Reporting Issues
-
-If you would like to report an issue, you can open a new issue in the
-[GitLab issue tracker](https://gitlab.com/nsnam/ns-3-dev/-/issues).
-Before creating a new issue, please check if the problem that you are facing
-was already reported and contribute to the discussion, if necessary.
-
-## Asking Questions
-
-ns-3 has an official [ns-3-users message board](https://groups.google.com/g/ns-3-users)
-where the community asks questions and share helpful advice.
-Additionally, ns-3 has the [ns-3 Zulip chat](https://ns-3.zulipchat.com/), used to discuss
-development issues and questions among maintainers and the community.
-
-Please use the above resources to ask questions about ns-3, rather than creating issues.
-
-## ns-3 App Store
-
-The official [ns-3 App Store](https://apps.nsnam.org/) is a centralized directory
-listing third-party modules for ns-3 available on the Internet.
-
-More information on how to submit an ns-3 module to the ns-3 App Store is available
-in the [ns-3 App Store documentation](https://www.nsnam.org/docs/contributing/html/external.html).
+- **`handover.cc` edits have no effect** → not rebuilt, or a stale binary was run.
+  Run `./ns3 build`, then execute `build/handover/ns3-dev-handover-debug`.
+- **Phase 5 / FlushFrames are all N/A / 0** → data frames not recognized. This analyzer
+  parses byte-wise (EHT-compatible); if it still happens, make sure you used the
+  **STA-side** pcap (`handover-sta-*.pcap`).
+- **The 4 scenarios overwrite each other** → use `run_all.sh`; it runs serially and
+  isolates each scenario's outputs into its own folder. Do not chain runs manually
+  (the pcap prefix is hard-coded in `handover.cc` and will be overwritten).
