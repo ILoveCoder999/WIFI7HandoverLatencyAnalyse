@@ -1,9 +1,9 @@
 {
   "activeScanning": true,
-  "differentChannels": false,
-  "simTime": 150,
+  "differentChannels": true,
+  "simTime": 150000,
   "tripTime": 75,
-  "repetitions": 1,
+  "repetitions": 1000,
   "channels": ["{36,20,BAND_5GHZ,0}", "{40,20,BAND_5GHZ,0}"],
   "packetInterval": 0.03,
   "payloadSize": 22,
@@ -16,9 +16,7 @@
     {"x": 60.0, "y": 0.0, "z": 0.0},
     {"x": 90.0, "y": 0.0, "z": 0.0}
   ],
-  "enablePcap": true,
+  "enablePcap": false,
   "enableAnimation": false,
-  "maxMissedBeacons": 3,
-  "enableController": true,
-  "controllerDelayMs": 2.0
+  "maxMissedBeacons": 3
 }

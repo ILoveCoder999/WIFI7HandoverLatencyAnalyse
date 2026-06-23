@@ -1,8 +1,13 @@
-# Ignore everything on scratch by default, except the provided examples
 /*
 !.gitignore
 
 !nested-subdir/
 !subdir/
+!handover2d/
+!aidatacenter/
+
 !scratch-simulator.cc
 !CMakeLists.txt
+
+# 显式忽略 handover2d 下的结果文件夹
+/handover2d/results/

@@ -281,7 +281,7 @@ int main(int argc, char** argv) {
           << sim_config.activeScanning << " ===" << std::endl;
     RngSeedManager::SetSeed(1);
 
-    Config::SetDefault("ns3::WifiMacQueue::MaxDelay", TimeValue(MilliSeconds(800)));
+    Config::SetDefault("ns3::WifiMacQueue::MaxDelay", TimeValue(MilliSeconds(500)));
 
     
 
@@ -345,9 +345,9 @@ int main(int argc, char** argv) {
             Ptr<QosTxop> txop = staMacQ->GetQosTxop(ac);
             if (txop && txop->GetWifiMacQueue()) {
                 txop->GetWifiMacQueue()->SetAttribute(
-                    "MaxDelay", TimeValue(MilliSeconds(800)));   // 只设置，不回读
+                    "MaxDelay", TimeValue(MilliSeconds(500)));   // 只设置，不回读
                 std::cout << "[CHECK] AC=" << ac
-                          << " MaxDelay <- 800 ms" << std::endl;
+                          << " MaxDelay <- 500 ms" << std::endl;
             }
         }
     }
@@ -513,7 +513,7 @@ int main(int argc, char** argv) {
 
     // --- Block Ack session flush on de-association ---
     // Without this the BlockAckManager keeps the old BA agreement alive and
-    // fires ~1 800 Block Ack Req frames to the now-unreachable AP, blocking
+    // fires ~1 500 Block Ack Req frames to the now-unreachable AP, blocking
     // the new ADDBA handshake for ~435 ms.
     ss.str(std::string());
     ss << "/NodeList/" << wifiStaNode.Get(0)->GetId()
