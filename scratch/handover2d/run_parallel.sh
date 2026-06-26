@@ -31,9 +31,12 @@ PASSIVE_CFG="${PASSIVE_CFG:-$HANDOVER_DIR/handover_same_channel_passive_10000.js
 ACTIVE_CFG="${ACTIVE_CFG:-$HANDOVER_DIR/handover_different_channels_active_10000.json}"
 
 TOTAL_TRIPS="${TOTAL_TRIPS:-10000}"
-SHARDS="${SHARDS:-10}"
-JOBS="${JOBS:-$SHARDS}"
+SHARDS="${SHARDS:-100}"          # many SHORT shards avoid the long-run livelock
+JOBS="${JOBS:-10}"
 BINWIDTHS="${BINWIDTHS:-1,2.5,5}"
+# Per-shard wall-clock cap. If a shard live-locks it gets killed and the run
+# moves on instead of spinning a core for days. "0" disables the cap.
+SHARD_TIMEOUT="${SHARD_TIMEOUT:-30m}"
 MODE="${1:-both}"
 
 mkdir -p "$OUTDIR" "$ANALYSIS"
@@ -69,21 +72,24 @@ run_scenario() {
         [ "$i" -lt "$rem" ] && reps=$((reps+1))
         local cfg="$OUTDIR/_shard_${tag}_${i}.json"
         local sta="$OUTDIR/sta_${tag}_shard${i}.json"
-        local assoc="$OUTDIR/assoc_${tag}_shard${i}.json"
+        local assoc="/dev/null"
         make_shard_cfg "$base_cfg" "$reps" "$cfg"
+        # timeout guard: kill a live-locked shard instead of spinning forever
+        local TO=""
+        [ "$SHARD_TIMEOUT" != "0" ] && TO="timeout --signal=KILL $SHARD_TIMEOUT"
         # --RngRun gives each shard an independent random stream
-        echo "cd '$NS3_ROOT' && '$BIN' --jsonConfig='$cfg' --staLogFile='$sta' --assocLogFile='$assoc' --RngRun=$((i+1)) > '$OUTDIR/log_${tag}_shard${i}.txt' 2>&1" \
+        echo "cd '$NS3_ROOT' && $TO '$BIN' --jsonConfig='$cfg' --staLogFile='$sta' --assocLogFile='$assoc' --RngRun=$((i+1)) > '$OUTDIR/log_${tag}_shard${i}.txt' 2>&1" \
             >> "$OUTDIR/cmds_${tag}.txt"
     done
 
     log "$tag: launching $SHARDS shards ($JOBS at a time, $base–$((base+1)) trips each) ..."
-    if command -v parallel >/dev/null 2>&1; then
-        parallel -j "$JOBS" < "$OUTDIR/cmds_${tag}.txt"
-    else
-        # xargs fallback: -P parallelism, -L1 one command per line
-        xargs -P "$JOBS" -I CMD bash -c CMD < "$OUTDIR/cmds_${tag}.txt"
-    fi
-    log "$tag: all shards finished."
+    # Always use xargs -P (universally available). We deliberately do NOT use
+    # 'parallel': on some systems that is moreutils' parallel with incompatible
+    # syntax, which fails instantly (exit 125).  '|| true' so that a shard that
+    # times out / errors does not abort the whole run before the analysis step.
+    xargs -P "$JOBS" -I CMD bash -c CMD < "$OUTDIR/cmds_${tag}.txt" \
+        || log "$tag: NOTE - one or more shards exited non-zero (timed out?), continuing."
+    log "$tag: shard phase done."
 }
 
 case "$MODE" in

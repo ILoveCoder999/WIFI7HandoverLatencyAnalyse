@@ -5,9 +5,15 @@
 !subdir/
 !handover2d/
 !aidatacenter/
-
+!fattree/
 !scratch-simulator.cc
 !CMakeLists.txt
 
 # 显式忽略 handover2d 下的结果文件夹
-/handover2d/results/
+#/handover2d/results/
+
+/handover2d/results/*.log
+/handover2d/results/*.pcap
+/handover2d/results/*.json
+/handover2d/results/*.txt
+/handover2d/results/*.csv

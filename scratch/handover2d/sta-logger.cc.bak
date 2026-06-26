@@ -9,8 +9,6 @@
 #include "ns3/wifi-psdu.h"
 #include "ns3/wifi-net-device.h"
 
-#include <algorithm>   // std::upper_bound
-
 NS_LOG_COMPONENT_DEFINE("StaLogger");
 
 STALogger::STALogger(std::string out_file_path, std::string header,
@@ -43,21 +41,14 @@ void STALogger::deAssocCallback(Mac48Address /* ap */)
 
 std::string STALogger::_apAtTime(Time t) const
 {
-    // _assocHistory is time-ordered (entries are appended at Simulator::Now(),
-    // which is monotonically non-decreasing).  Binary-search for the last entry
-    // with time <= t: O(log n) instead of the previous O(n) linear scan.  Over
-    // long runs (thousands of (de)association events, millions of packets) the
-    // linear version made per-packet cost grow without bound and the simulation
-    // slowed to a crawl; this keeps it flat.
-    if (_assocHistory.empty())
-        return "";
-    auto it = std::upper_bound(
-        _assocHistory.begin(), _assocHistory.end(), t,
-        [](const ns3::Time& tt, const auto& ev) { return tt < ev.time; });
-    if (it == _assocHistory.begin())
-        return "";          // t precedes the first recorded event
-    --it;                   // last entry with time <= t
-    return it->ap;
+    // Walk the history in order; return the last AP recorded at or before t.
+    std::string result = "";
+    for (const auto& ev : _assocHistory)
+    {
+        if (ev.time > t) break;
+        result = ev.ap;
+    }
+    return result;
 }
 
 // ---------------------------------------------------------------------------
